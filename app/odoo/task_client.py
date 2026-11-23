@@ -133,16 +133,6 @@ class TaskOdooClient(BaseOdooClient):
         return fields
 
     def _enrich_task(self, t: dict) -> dict:
-        stage_name = t["stage_id"][1] if t.get("stage_id") else "Open"
-        stage_id_val = t["stage_id"][0] if t.get("stage_id") else None
-
-        # In this Odoo instance, Stage ID 1 and 170 are technically named 'Internal' in the backend database,
-        # but are rendered on the UI statusbar and saved filters as 'Pipeline' ('Pipline').
-        if stage_id_val in (1, 170) or (stage_name and stage_name.lower() == "internal"):
-            stage_display = "Pipeline"
-        else:
-            stage_display = stage_name
-
         item = {
             "id": t["id"],
             "name": t["name"],
@@ -150,8 +140,8 @@ class TaskOdooClient(BaseOdooClient):
             "project_id": t["project_id"][0] if t.get("project_id") else None,
             "deadline": str(t.get("date_deadline") or "") or "No deadline",
             "priority": "high" if str(t.get("priority")) == "1" else "normal",
-            "stage": stage_display,
-            "stage_id": stage_id_val,
+            "stage": t["stage_id"][1] if t.get("stage_id") else "Open",
+            "stage_id": t["stage_id"][0] if t.get("stage_id") else None,
             "description": (t.get("description") or "")[:300],
             "allocated_hours": t.get("allocated_hours") or 0.0,
             "effective_hours": t.get("effective_hours") or 0.0,

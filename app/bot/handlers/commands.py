@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional, Tuple
 from telegram import Update
@@ -381,7 +382,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # Natural Language Agent Loop
-    thinking_msg = await update.message.reply_text("💭 Thinking...")
+    thinking_msg = None
+    for attempt in range(2):
+        try:
+            thinking_msg = await update.message.reply_text("💭 Thinking...")
+            break
+        except Exception as e:
+            logger.warning(f"Failed to send initial thinking message (attempt {attempt + 1}): {e}")
+            if attempt == 0:
+                await asyncio.sleep(0.5)
+
     try:
         history = get_chat_history(user.id, limit=6)
         orchestrator = AgentOrchestrator(att_client, task_client)
@@ -390,7 +400,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         save_chat_message(user.id, "user", text)
         save_chat_message(user.id, "assistant", reply)
 
-        await safe_edit_text(thinking_msg, reply)
+        if thinking_msg:
+            await safe_edit_text(thinking_msg, reply)
+        else:
+            await update.message.reply_text(reply, parse_mode="Markdown")
     except Exception as e:
         logger.exception("Agent execution failed")
-        await safe_edit_text(thinking_msg, f"❌ An error occurred: {str(e)}")
+        err_msg = f"❌ An error occurred: {str(e)}"
+        if thinking_msg:
+            await safe_edit_text(thinking_msg, err_msg)
+        else:
+            await update.message.reply_text(err_msg)

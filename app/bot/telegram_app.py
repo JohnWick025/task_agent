@@ -1,11 +1,13 @@
 import logging
 from telegram import Update
+from telegram.request import HTTPXRequest
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
     filters,
+    ContextTypes,
 )
 
 from app.config import settings
@@ -27,11 +29,34 @@ logger = logging.getLogger(__name__)
 _bot_app: Application = None
 
 
+async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and notify the user gracefully if possible."""
+    logger.error("Exception while handling an update: %s", context.error, exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ A temporary network or connection error occurred. Please try again in a few moments."
+            )
+        except Exception:
+            pass
+
+
 def get_telegram_app() -> Application:
     global _bot_app
     if _bot_app is None:
         token = settings.TELEGRAM_BOT_TOKEN or "dummy-token-for-dev"
-        _bot_app = Application.builder().token(token).build()
+        # Configure robust connection pool and timeouts for cloud environments (AWS EC2 / Render)
+        request_config = HTTPXRequest(
+            connection_pool_size=16,
+            connect_timeout=30.0,
+            read_timeout=30.0,
+            write_timeout=30.0,
+            pool_timeout=30.0,
+        )
+        _bot_app = Application.builder().token(token).request(request_config).build()
+
+        # Register Global Error Handler
+        _bot_app.add_error_handler(global_error_handler)
 
         # Register Setup Wizard first so it intercepts setup steps
         _bot_app.add_handler(get_setup_handler())

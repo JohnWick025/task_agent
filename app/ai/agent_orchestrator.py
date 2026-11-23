@@ -38,14 +38,9 @@ def build_system_prompt(
         f"Your Capabilities & Guidelines:\n"
         f"1. HR Attendance: When connected, handle clock-in, clock-out, active shift status, and daily hours worked.\n"
         f"2. Tasks & Pipeline: When connected, search tasks for the user OR for any colleague/team member (e.g. 'Girija', 'Guna', 'Arthi').\n"
-        f"   - Internal Tasks vs Pipeline Tasks:\n"
-        f"     • 'Internal Tasks': In this organization, Internal Tasks specifically refers to tasks in the project named 'Internal' (e.g. #197 Time Off, meetings, training, non-client internal tasks).\n"
-        f"     • 'Pipeline Tasks' / 'My Pipeline': Refers to the user's active development pipeline across all their client and development projects (OCA, Zoho, Real Estate, etc.) across open stages.\n"
-        f"     • NEVER label client development tasks as 'Internal tasks'! Their stage on the UI is 'Pipeline', and their projects are their actual projects.\n"
-        f"   - If user asks for general tasks ('my tasks', 'my pipeline', 'all open tasks'): call `search_tasks(my_tasks_only=True, open_only=True)` with stage_name empty.\n"
-        f"   - If user asks for internal tasks ('my internal tasks', 'internal tasks'): search with project_name='Internal'.\n"
-        f"   - If user asks for a specific stage ('my todo tasks', 'in progress tasks', 'done tasks', 'on hold tasks'): call `search_tasks(my_tasks_only=True, stage_name='<Stage>')`.\n"
-        f"   - Multi-Stage Queries: If user asks for multiple stages (e.g. 'internal and onhold', 'pipeline and on hold'), group tasks under separate headers for each stage based on their actual returned `stage` property. NEVER duplicate or repeat tasks across stages!\n"
+        f"   - When user asks for general tasks ('my tasks', 'my pipeline', 'all open tasks'): call `search_tasks(my_tasks_only=True, open_only=True)` with stage_name empty.\n"
+        f"   - When user asks for a specific stage ('my internal tasks', 'my todo tasks', 'in progress tasks', 'done tasks', 'on hold tasks'): call `search_tasks(my_tasks_only=True, stage_name='<Stage>')`.\n"
+        f"   - Multi-Stage Queries: If user asks for multiple stages (e.g. 'internal and onhold', 'on hold and in progress'), group tasks under separate headers for each stage based on their actual returned `stage` property. NEVER duplicate or repeat tasks across stages!\n"
         f"   - If a specific stage query returns 0 tasks, report honestly: 'You currently have no tasks in the <Stage> stage.' Mention what stages their open tasks are in.\n"
         f"   - When user asks about a team member/colleague: call `search_tasks(assignee_name=colleague_name, open_only=True)`.\n"
         f"   - When user asks for completed/done tasks: call `search_tasks(open_only=False, stage_name='Done')`.\n"
@@ -131,15 +126,11 @@ class AgentOrchestrator:
         if self.task_client:
             task_keywords = ["task", "tasks", "pipeline", "todo", "to do", "stage", "stages", "working on", "assigned"]
             if any(w in msg_low for w in task_keywords):
-                # Check if user specifically asks for "internal tasks" (referring to Project "Internal")
-                is_internal_proj = bool(re.search(r'\binternal\s+tasks?\b|\btasks?\s+in\s+internal\b|\bproject\s+internal\b', msg_low))
-                proj_name = "Internal" if is_internal_proj else None
-
                 known_stages = {
+                    "internal": "Internal",
                     "on hold": "On Hold", "onhold": "On Hold", "hold": "On Hold",
                     "in progress": "In Progress", "inprogress": "In Progress", "progress": "In Progress", "wip": "In Progress",
                     "to do": "To Do", "todo": "To Do",
-                    "pipeline stage": "Pipeline",
                     "done": "Done", "completed": "Done", "closed": "Done",
                     "review": "Review", "code review": "Review",
                     "client validation": "Client Validation",
@@ -148,13 +139,13 @@ class AgentOrchestrator:
                 }
 
                 matched_stages = []
-                if not is_internal_proj:
-                    for k, v in known_stages.items():
-                        if re.search(r'\b' + re.escape(k) + r'\b', msg_low):
-                            if v not in matched_stages:
-                                matched_stages.append(v)
+                for k, v in known_stages.items():
+                    if re.search(r'\b' + re.escape(k) + r'\b', msg_low):
+                        if v not in matched_stages:
+                            matched_stages.append(v)
 
                 stage_query = " and ".join(matched_stages) if matched_stages else None
+                proj_name = None
 
                 # Detect colleague
                 colleague = None
